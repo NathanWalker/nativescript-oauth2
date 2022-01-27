@@ -29,5 +29,6 @@ export class TnsOAuthClientAppDelegate {
   }
 
   public static doRegisterDelegates() {
+    // Nothing.
   }
 }
