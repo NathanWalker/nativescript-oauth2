@@ -1,7 +1,7 @@
-import * as querystring from "querystring";
-import * as URL from "url";
+import * as querystring from "querystringify";
+import * as urlparse from 'url-parse';
 const jws = require("./jws");
-import * as jsrsasign from 'jsrsasign';
+import * as jsrsasign from "jsrsasign";
 import { Http, HttpResponse, HttpRequestOptions } from "@nativescript/core";
 
 import {
@@ -9,7 +9,11 @@ import {
   TnsOaUnsafeProviderOptions,
 } from "./providers";
 
-import { TnsOAuthClient, TnsOAuthResponseBlock, ITnsOAuthTokenResult } from "./index";
+import {
+  TnsOAuthClient,
+  TnsOAuthResponseBlock,
+  ITnsOAuthTokenResult,
+} from "./index";
 import { httpResponseToToken } from "./tns-oauth-utils";
 
 const accessTokenName = "access_token";
@@ -23,10 +27,6 @@ export class TnsOAuthClientConnection {
 
   public get client(): TnsOAuthClient {
     return this._client;
-  }
-
-  public get completion() {
-    return this._completion;
   }
 
   public static initWithRequestClientCompletion(
@@ -50,10 +50,9 @@ export class TnsOAuthClientConnection {
   ) {
     const instance = new TnsOAuthClientConnection();
 
-    if (instance) {
-      instance._client = client;
+    instance._client = client;
 
-      /*
+    /*
       instance._request = TnsOAuthClientConnection.configureHeadersOnRequestWithClientWithFeatures(
         request,
         client,
@@ -61,10 +60,9 @@ export class TnsOAuthClientConnection {
       );
       */
 
-      instance._completion = completion;
+    instance._completion = completion;
 
-      // instance._customHeaders = getAuthHeaderFromCredentials(client.provider);
-    }
+    // instance._customHeaders = getAuthHeaderFromCredentials(client.provider);
 
     return instance;
   }
@@ -81,7 +79,13 @@ export class TnsOAuthClientConnection {
   */
 
   public startGetTokenFromCode(authCode: string) {
-    this.getTokenFromCode(this.client, authCode, this.completion);
+    this.getTokenFromCode(this.client, authCode)
+      .then((res) => {
+        console.log(`just to ensure the promise doesnt get lost somewhere??`);
+      })
+      .catch((err) => {
+        console.log("startGetTokenFromCode caught err:", err);
+      });
   }
 
   public startTokenRevocation() {
@@ -95,7 +99,7 @@ export class TnsOAuthClientConnection {
     const body = querystring.stringify({
       client_id: options.clientId,
       token: this.client.tokenResult.refreshToken,
-      token_type_hint: "refresh_token"
+      token_type_hint: "refresh_token",
     });
 
     Http.request({
@@ -106,16 +110,16 @@ export class TnsOAuthClientConnection {
     }).then(
       (response: HttpResponse) => {
         if (response.statusCode !== 200) {
-          this.completion(
+          this._completion(
             null,
             response,
             new Error(`Failed logout with status ${response.statusCode}.`)
           );
         } else {
-          this.completion(null, response, null);
+          this._completion(null, response, null);
         }
       },
-      (error) => this.completion(null, null, error)
+      (error) => this._completion(null, null, error)
     );
   }
 
@@ -157,7 +161,7 @@ export class TnsOAuthClientConnection {
     }).then(
       (response: HttpResponse) => {
         if (response.statusCode !== 200) {
-          this.completion(
+          this._completion(
             null,
             response,
             new Error(
@@ -165,23 +169,19 @@ export class TnsOAuthClientConnection {
             )
           );
         } else {
-          this.completion(null, response, null);
+          this._completion(null, response, null);
         }
       },
-      (error) => this.completion(null, null, error)
+      (error) => this._completion(null, null, error)
     );
   }
 
-  private getTokenFromCode(
-    client: TnsOAuthClient,
-    code: string,
-    completion
-  ): Promise<any> {
+  private getTokenFromCode(client: TnsOAuthClient, code: string): Promise<any> {
     let oauthParams = {
       grant_type: "authorization_code",
     };
 
-    return this.getOAuthAccessToken(client, code, oauthParams, completion);
+    return this.getOAuthAccessToken(client, code, oauthParams);
   }
 
   private getAccessTokenUrl(client: TnsOAuthClient): string {
@@ -230,8 +230,7 @@ export class TnsOAuthClientConnection {
   public getOAuthAccessToken(
     client: TnsOAuthClient,
     code,
-    parameters,
-    completion: TnsOAuthResponseBlock
+    parameters
   ): Promise<any> {
     const params = parameters || {};
     params["client_id"] = client.provider.options.clientId;
@@ -261,15 +260,21 @@ export class TnsOAuthClientConnection {
     const accessTokenUrl = this.getAccessTokenUrl(client);
 
     return new Promise<any>((resolve, reject) => {
+      console.log("getOAuthAccessToken:", accessTokenUrl);
       this._createRequest("POST", accessTokenUrl, post_headers, post_data, null)
         .then((response: HttpResponse) => {
-            let tokenResult = httpResponseToToken(response);
-            this.jwksValidattion(client.provider.options.jwksEndpoint, tokenResult.idToken);
-            completion(tokenResult, <any>response);
-            resolve(response);
+          console.log("oauth2 _createRequest response:", response);
+          let tokenResult = httpResponseToToken(response);
+          this.jwksValidattion(
+            client.provider.options.jwksEndpoint,
+            tokenResult.idToken
+          );
+          this._completion(tokenResult, <any>response);
+          resolve(response);
         })
-        .catch(er => {
-          completion(null, er);
+        .catch((er) => {
+          console.log("_createRequest getOAuthAccessToken catch er:", er);
+          this._completion(null, er);
           // client.logout(); does not have any effect
           reject(er);
         });
@@ -277,26 +282,34 @@ export class TnsOAuthClientConnection {
   }
 
   public jwksValidattion(jwksEndpoint: string, idToken: string): void {
-    this._createRequest('GET', jwksEndpoint, null, null, null)
-    .then((jwksKeys: HttpResponse) => {
-      let tokenKeys;
-      try {
-        tokenKeys = jwksKeys.content.toJSON()['keys'];
-      } catch (e) {
-        tokenKeys = querystring.parse(jwksKeys.content.toString())['keys'];
-      }
-      const decodedIdToken = jws.jwsDecode(idToken);
-      if (!jsrsasign.KJUR.jws.JWS.verify(idToken, this.findPublicKeyByKid(decodedIdToken['header']['kid'], tokenKeys))) {
-        throw new Error('JWKS validation of ID token has failed!');
-      }
-      console.log('JWKS validation of ID token has passed!!!');
-    });
+    this._createRequest("GET", jwksEndpoint, null, null, null)
+      .then((jwksKeys: HttpResponse) => {
+        let tokenKeys;
+        try {
+          tokenKeys = jwksKeys.content.toJSON()["keys"];
+        } catch (e) {
+          tokenKeys = querystring.parse(jwksKeys.content.toString())["keys"];
+        }
+        const decodedIdToken = jws.jwsDecode(idToken);
+        if (
+          !jsrsasign.KJUR.jws.JWS.verify(
+            idToken,
+            this.findPublicKeyByKid(decodedIdToken["header"]["kid"], tokenKeys)
+          )
+        ) {
+          throw new Error("JWKS validation of ID token has failed!");
+        }
+        console.log("JWKS validation of ID token has passed!!!");
+      })
+      .catch((er) => {
+        console.log("_createRequest jwksValidattion catch er:", er);
+      });
   }
 
   private findPublicKeyByKid(id_token_kid: string, tokenKeys: []): Object {
     let key: string;
     for (let c = 0; c < tokenKeys.length; c++) {
-      if ( tokenKeys[c]['kid'] === id_token_kid ) {
+      if (tokenKeys[c]["kid"] === id_token_kid) {
         return jsrsasign.KEYUTIL.getKey(tokenKeys[c]);
       }
     }
@@ -310,7 +323,7 @@ export class TnsOAuthClientConnection {
     post_body,
     access_token
   ): Promise<HttpResponse> {
-    const parsedUrl = URL.parse(url, true);
+    const parsedUrl = urlparse(url, true);
 
     const realHeaders = {};
     for (let key in this._customHeaders) {
@@ -323,36 +336,27 @@ export class TnsOAuthClientConnection {
     }
     realHeaders["Host"] = parsedUrl.host;
 
-    if (access_token && !("Authorization" in realHeaders)) {
-      if (!parsedUrl.query) {
-        parsedUrl.query = {};
-      }
-      parsedUrl.query[accessTokenName] = access_token;
-    }
+    // if (access_token && !("Authorization" in realHeaders)) {
+    //   if (!parsedUrl.query) {
+    //     parsedUrl.query = {};
+    //   }
+    //   parsedUrl.query[accessTokenName] = access_token;
+    // }
 
-    let queryStr = querystring.stringify(parsedUrl.query);
-    if (queryStr) {
-      queryStr = "?" + queryStr;
-    }
-    const options = {
-      host: parsedUrl.hostname,
-      port: parsedUrl.port,
-      path: parsedUrl.pathname + queryStr,
-      method: method,
+    // let queryStr = querystring.stringify(parsedUrl.query);
+    // if (queryStr) {
+    //   queryStr = "?" + queryStr;
+    // }
+
+    console.log("_createRequest:", url);
+    console.log("_createRequest post_body:", post_body);
+    console.log("_createRequest options.headers:", realHeaders);
+
+    return Http.request({
+      url,
+      method,
       headers: realHeaders,
-    };
-
-    return this._executeRequest(options, url, post_body);
-  }
-
-  private _executeRequest(options, url, post_body): Promise<HttpResponse> {
-    const promise = Http.request({
-      url: url,
-      method: options.method,
-      headers: options.headers,
       content: post_body,
     });
-    return promise;
   }
-
 }

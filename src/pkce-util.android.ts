@@ -20,9 +20,9 @@ export function sha256base64encoded(codeVerifier: string): string {
       org.bouncycastle.crypto.digests.SHA256Digest
   ) {
     const digest = sha256Digester.digest;
-    const size = digest.getDigestSize();
+    const size = (<any>digest).getDigestSize();
     digestBytes = Array.create("byte", size);
-    digest.doFinal(digestBytes, 0);
+    (<any>digest).doFinal(digestBytes, 0);
   } else {
     digestBytes = sha256Digester.digest();
   }

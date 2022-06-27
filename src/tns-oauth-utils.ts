@@ -1,6 +1,6 @@
 import { HttpResponse } from "@nativescript/core";
-import * as querystring from "querystring";
-import * as UrlLib from "url";
+import * as querystring from "querystringify";
+import * as urlparse from 'url-parse';
 import { TnsOaProvider } from "./providers";
 import { ITnsOAuthTokenResult } from ".";
 import { TnsOAuthClient } from "./index";
@@ -77,10 +77,9 @@ export function authorizationCodeFromRedirectUrl(url: string): string {
   let authorizationCode: string = null;
 
   if (url) {
-    let parsedRetStr = UrlLib.parse(url);
+    let parsedRetStr = urlparse(url, true);
 
-    let qsObj = querystring.parse(parsedRetStr.query) as any;
-    authorizationCode = qsObj["code"];
+    authorizationCode = parsedRetStr.query["code"];
   }
   return authorizationCode;
 }
@@ -169,16 +168,22 @@ export function httpResponseToToken(
 ): ITnsOAuthTokenResult {
   let results;
   try {
+    console.log('httpResponseToToken:', response);
+    console.log('httpResponseToToken response.content:', response.content);
     // As of http://tools.ietf.org/html/draft-ietf-oauth-v2-07
     // responses should be in JSON
     results = response.content.toJSON();
   } catch (e) {
+    console.log('httpResponseToToken error:', e);
     // .... However both Facebook + Github currently use rev05 of the spec
     // and neither seem to specify a content-type correctly in their response headers :(
     // clients of these services will suffer a *minor* performance cost of the exception
     // being thrown
+    console.log('httpResponseToToken here1?')
     results = querystring.parse(response.content.toString());
+    console.log('httpResponseToToken here2?')
   }
+  console.log('httpResponseToToken here3?')
   let access_token = results["access_token"];
   let refresh_token = results["refresh_token"];
   let id_token = results["id_token"];
@@ -189,7 +194,7 @@ export function httpResponseToToken(
   let expDate = new Date();
   expDate.setSeconds(expDate.getSeconds() + expSecs);
   const decoded = jws.jwsDecode(id_token);
-
+  console.log('httpResponseToToken here4')
   return {
     accessToken: access_token,
     refreshToken: refresh_token,

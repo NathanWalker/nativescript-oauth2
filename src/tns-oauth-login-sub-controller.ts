@@ -25,6 +25,8 @@ export class TnsOAuthLoginSubController {
   public authState: TnsOAuthState;
   public client: TnsOAuthClient;
   public frame: Frame;
+  private responseCompletion: TnsOAuthResponseBlock;
+  private connection: TnsOAuthClientConnection;
 
   constructor(client: TnsOAuthClient) {
     this.client = client;
@@ -150,10 +152,9 @@ export class TnsOAuthLoginSubController {
     // completion with tokenResult.
     // If a accessToken is in the result (data) and there is no responseError,
     // call loginCompletion with tokenResult
-    let responseCompletion: TnsOAuthResponseBlock;
 
     if (completion) {
-      responseCompletion = (
+      this.responseCompletion = (
         data: any,
         response: HttpResponse,
         responseError: Error
@@ -173,13 +174,14 @@ export class TnsOAuthLoginSubController {
       };
     }
 
-    const connection: TnsOAuthClientConnection = TnsOAuthClientConnection.initWithRequestClientCompletion(
+    console.log('TnsOAuthLoginSubController startGetTokenFromCode')
+    this.connection = TnsOAuthClientConnection.initWithRequestClientCompletion(
       // request,
       this.client,
-      responseCompletion
+      this.responseCompletion
     );
 
-    connection.startGetTokenFromCode(this.authState.authCode);
+    this.connection.startGetTokenFromCode(this.authState.authCode);
   }
 
   public completeLoginWithTokenResponseError(
