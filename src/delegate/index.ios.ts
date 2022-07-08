@@ -1,13 +1,8 @@
+import * as applicationModule from '@nativescript/core/application';
 import { TnsOAuthClient } from "../index";
-import * as applicationModule from "@nativescript/core/application";
-import * as platformModule from '@nativescript/core/platform';
 
 function setup() {
-  @ObjCClass(UIApplicationDelegate)
-  @NativeClass()
-  class TnsOAuthClientAppDelegate
-    extends UIResponder
-    implements UIApplicationDelegate {
+  class TnsOAuthClientAppDelegate {
     private static _client: TnsOAuthClient;
     private static _urlScheme: string;
 
@@ -17,35 +12,40 @@ function setup() {
     }
 
     private static getAppDelegate() {
+      // As of NativeScript 8.2, ensureNativeApplication should be called prior to accesses to applicationModule.ios.
+      /* @ts-ignore */
+      if (!!applicationModule.ensureNativeApplication) {
+        /* @ts-ignore */
+        applicationModule.ensureNativeApplication();
+      }
       // Play nice with other plugins by not completely ignoring anything already added to the appdelegate
       if (applicationModule.ios.delegate === undefined) {
-        @ObjCClass(UIApplicationDelegate)
-        class UIApplicationDelegateImpl extends UIResponder implements UIApplicationDelegate { }
-  
+        @NativeClass
+        class UIApplicationDelegateImpl extends UIResponder implements UIApplicationDelegate {
+          public static ObjCProtocols = [UIApplicationDelegate];
+        }
+
         applicationModule.ios.delegate = UIApplicationDelegateImpl;
       }
       return applicationModule.ios.delegate;
     }
-  
+
     private static addAppDelegateMethods = appDelegate => {
-      if (parseInt(platformModule.Device.osVersion.split('.')[0]) >= 10 ) {
-        // iOS >= 10
-        appDelegate.prototype.applicationOpenURLOptions = (
-              application: UIApplication,
-              url: NSURL,
-              options: NSDictionary<string, any>) => {
-          TnsOAuthClientAppDelegate.handleIncomingUrl(url);
-        };
-      } else {
-        // iOS < 10
-        appDelegate.prototype.applicationOpenURLSourceApplicationAnnotation = (
-              application: UIApplication,
-              url: NSURL,
-              sourceApplication: string,
-              annotation: any ) => {
-          TnsOAuthClientAppDelegate.handleIncomingUrl(url);
-        };
-      }
+      // iOS >= 10
+      appDelegate.prototype.applicationOpenURLOptions = (
+        application: UIApplication,
+        url: NSURL,
+        options: NSDictionary<string, any>) => {
+        TnsOAuthClientAppDelegate.handleIncomingUrl(url);
+      };
+      // iOS < 10
+      appDelegate.prototype.applicationOpenURLSourceApplicationAnnotation = (
+        application: UIApplication,
+        url: NSURL,
+        sourceApplication: string,
+        annotation: any) => {
+        TnsOAuthClientAppDelegate.handleIncomingUrl(url);
+      };
     }
 
     public static doRegisterDelegates() {

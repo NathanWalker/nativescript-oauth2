@@ -90,10 +90,15 @@ export class TnsOAuthLoginSubController {
         (completion as TnsOAuthClientLogoutBlock)(null);
           return false;
       }
-      if (this.authState.isLogout && url === this.client.provider.options.redirectUri) {
-        this.client.logout();
-        (completion as TnsOAuthClientLogoutBlock)(undefined);
-        return true;
+      if (this.authState.isLogout) {
+        if (url === this.client.provider.options.redirectUri) {
+          this.client.logout();
+          (completion as TnsOAuthClientLogoutBlock)(undefined);
+          return true;
+        } else {
+          (completion as TnsOAuthClientLogoutBlock)(`incomplete`);
+          return false;
+        }
       } else {
         const codeExchangeRequestUrl: string = this.codeExchangeRequestUrlFromRedirectUrl(
           url
@@ -105,6 +110,8 @@ export class TnsOAuthLoginSubController {
             completion
           );
           return true;
+        } else {
+          (completion as TnsOAuthClientLoginBlock)(undefined, `incomplete`);
         }
       }
     }
